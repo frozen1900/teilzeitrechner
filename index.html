@@ -5,14 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#2563eb">
     <title>Teilzeit & Netto Rechner</title>
-    <link rel="manifest" href="data:application/manifest+json;utf8,{
-        %22short_name%22:%22NettoRechner%22,
-        %22name%22:%22Teilzeit%20Netto%20Rechner%22,
-        %22start_url%22:%22.%22,
-        %22background_color%22:%22#f8fafc%22,
-        %22theme_color%22:%22#2563eb%22,
-        %22display%22:%22standalone%22
-    }">
     <style>
         :root {
             --primary: #2563eb;
@@ -176,6 +168,7 @@
                 <tr><th>Position</th><th>Vollzeit</th><th>Teilzeit</th></tr>
             </thead>
             <tbody>
+                <tr><td><strong>Bruttogehalt</strong></td><td id="bruttoVzDetail"><strong>0 €</strong></td><td id="bruttoTzDetail"><strong>0 €</strong></td></tr>
                 <tr><td>Lohnsteuer</td><td id="lstVz">0 €</td><td id="lstTz">0 €</td></tr>
                 <tr><td>Soli</td><td id="soliVz">0 €</td><td id="soliTz">0 €</td></tr>
                 <tr><td>Kirchensteuer</td><td id="kstVz">0 €</td><td id="kstTz">0 €</td></tr>
@@ -189,7 +182,7 @@
 
     <script>
         function toggleMode() {
-            const isHours = document.getElementById('modeHours').checked;
+            var isHours = document.getElementById('modeHours').checked;
             document.getElementById('groupTzHours').style.display = isHours ? 'block' : 'none';
             document.getElementById('groupTzPercent').style.display = isHours ? 'none' : 'block';
             calculate();
@@ -205,15 +198,16 @@
                 return;
             }
 
-            const bruttoVz = parseFloat(document.getElementById('bruttoVz').value) || 0;
-            const stundenVz = parseFloat(document.getElementById('stundenVz').value) || 1;
-            const steuerklasse = document.getElementById('steuerklasse').value;
-            const kirchensteuer = document.getElementById('kirchensteuer').value;
-            const anzahlKinder = parseInt(document.getElementById('anzahlKinder').value) || 0;
-            const bundesland = document.getElementById('bundesland').value;
+            var bruttoVz = parseFloat(document.getElementById('bruttoVz').value) || 0;
+            var stundenVz = parseFloat(document.getElementById('stundenVz').value) || 1;
+            var steuerklasse = document.getElementById('steuerklasse').value;
+            var kirchensteuer = document.getElementById('kirchensteuer').value;
+            var anzahlKinder = parseInt(document.getElementById('anzahlKinder').value) || 0;
+            var bundesland = document.getElementById('bundesland').value;
 
-            const isHours = document.getElementById('modeHours').checked;
-            let stundenTz, prozentTz;
+            var isHours = document.getElementById('modeHours').checked;
+            var stundenTz, prozentTz;
+            
             if (isHours) {
                 stundenTz = parseFloat(document.getElementById('stundenTz').value) || 0;
                 prozentTz = (stundenTz / stundenVz) * 100;
@@ -222,13 +216,13 @@
                 stundenTz = (prozentTz / 100) * stundenVz;
             }
 
-            const bruttoTz = bruttoVz * (prozentTz / 100);
+            var bruttoTz = bruttoVz * (prozentTz / 100);
 
-            const dataVz = calculateNettoDetails(bruttoVz, steuerklasse, kirchensteuer, anzahlKinder, bundesland);
-            const dataTz = calculateNettoDetails(bruttoTz, steuerklasse, kirchensteuer, anzahlKinder, bundesland);
+            var dataVz = calculateNettoDetails(bruttoVz, steuerklasse, kirchensteuer, anzahlKinder, bundesland);
+            var dataTz = calculateNettoDetails(bruttoTz, steuerklasse, kirchensteuer, anzahlKinder, bundesland);
 
-            const monatsStundenVz = stundenVz * 4.33;
-            const monatsStundenTz = stundenTz * 4.33;
+            var monatsStundenVz = stundenVz * 4.33;
+            var monatsStundenTz = stundenTz * 4.33;
 
             document.getElementById('nettoVzDisplay').innerText = formatEUR(dataVz.netto);
             document.getElementById('hourlyNetVz').innerText = formatEUR(monatsStundenVz > 0 ? dataVz.netto / monatsStundenVz : 0) + ' / Std. netto';
@@ -236,12 +230,15 @@
             document.getElementById('nettoTzDisplay').innerText = formatEUR(dataTz.netto);
             document.getElementById('hourlyNetTz').innerText = formatEUR(monatsStundenTz > 0 ? dataTz.netto / monatsStundenTz : 0) + ' / Std. netto';
 
-            document.getElementById('diffHours').innerText = `-${(stundenVz - stundenTz).toFixed(1)} h`;
-            document.getElementById('diffBrutto').innerText = `-${formatEUR(bruttoVz - bruttoTz)}`;
-            document.getElementById('diffNetto').innerText = `-${formatEUR(dataVz.netto - dataTz.netto)}`;
+            document.getElementById('diffHours').innerText = '-' + (stundenVz - stundenTz).toFixed(1) + ' h';
+            document.getElementById('diffBrutto').innerText = '-' + formatEUR(bruttoVz - bruttoTz);
+            document.getElementById('diffNetto').innerText = '-' + formatEUR(dataVz.netto - dataTz.netto);
             
-            const ids = ['lst', 'soli', 'kst', 'rv', 'av', 'kv', 'pv'];
-            ids.forEach(id => {
+            document.getElementById('bruttoVzDetail').innerHTML = '<strong>' + formatEUR(bruttoVz) + '</strong>';
+            document.getElementById('bruttoTzDetail').innerHTML = '<strong>' + formatEUR(bruttoTz) + '</strong>';
+
+            var ids = ['lst', 'soli', 'kst', 'rv', 'av', 'kv', 'pv'];
+            ids.forEach(function(id) {
                 document.getElementById(id + 'Vz').innerText = formatEUR(dataVz[id]);
                 document.getElementById(id + 'Tz').innerText = formatEUR(dataTz[id]);
             });
