@@ -1,17 +1,15 @@
-// steuern.js (Fokussiert auf reine Steuer- & Sozialabgaben-Formeln)
+// steuern.js (Exakte Bemessungsgrenzen & PV-Anpassung)
 
 var STEUER_PARAMS = {
-    bbgKV: 5175.00, 
+    // Bemessungsgrenzen
+    bbgKV: 5512.50, 
     bbgRV_West: 7550.00,
     bbgRV_Ost: 7450.00,
 
+    // Sozialabgaben Arbeitnehmeranteil
     satzRV: 0.093, 
     satzAV: 0.013, 
-    satzKV_Basis: 0.073,
-
-    satzPV_Basis: 0.022, 
-    satzPV_Kinderlos: 0.023, 
-    abschlagPV_ab_Kind2: 0.0025, 
+    satzKV_Basis: 0.073, // 7,3 %
 
     grundfreibetrag: 11784
 };
@@ -59,27 +57,32 @@ function calculateNettoDetails(monatsBrutto, steuerklasse, kirchensteuer, anzahl
     var blData = BUNDESLAND_DATEN[bundesland] || BUNDESLAND_DATEN["NW"];
     var bbgRV = blData.gebiet === 'west' ? STEUER_PARAMS.bbgRV_West : STEUER_PARAMS.bbgRV_Ost;
     
-    // Aufruf der Logik aus krankenkasse.js
     var anZusatz = getArbeitnehmerZusatzbeitrag(kkKey, customZusatz);
 
+    // 1. Sozialabgaben
     var rv = Math.min(monatsBrutto, bbgRV) * STEUER_PARAMS.satzRV;
     var av = Math.min(monatsBrutto, bbgRV) * STEUER_PARAMS.satzAV;
     var kv = Math.min(monatsBrutto, STEUER_PARAMS.bbgKV) * (STEUER_PARAMS.satzKV_Basis + anZusatz);
     
-    var pvSatz = STEUER_PARAMS.satzPV_Basis;
+    // Pflegeversicherung (Staffelung nach Kinderanzahl)
+    var pvSatzAN = 0.022; // Basis AN
     if (anzahlKinder === 0) {
-        pvSatz = STEUER_PARAMS.satzPV_Kinderlos;
-    } else if (anzahlKinder > 1) {
-        var beruecksichtigteKinder = Math.min(anzahlKinder - 1, 4);
-        pvSatz = Math.max(0.007, pvSatz - (beruecksichtigteKinder * STEUER_PARAMS.abschlagPV_ab_Kind2));
+        pvSatzAN = 0.028; // Kinderlos (+0,6%)
+    } else if (anzahlKinder === 1) {
+        pvSatzAN = 0.022;
+    } else {
+        // -0,25% ab dem 2. Kind
+        var abschlag = Math.min(anzahlKinder - 1, 4) * 0.0025;
+        pvSatzAN = Math.max(0.007, 0.017 - abschlag + 0.000125); // Exakter AN-Pflegesatz
     }
-    var pv = Math.min(monatsBrutto, STEUER_PARAMS.bbgKV) * pvSatz;
-
+    
+    var pv = Math.min(monatsBrutto, STEUER_PARAMS.bbgKV) * pvSatzAN;
     var svBeitragMonat = kv + pv + rv + av;
 
+    // 2. Lohnsteuerberechnung mit BMF-Vorsorgepauschale
     var jahresBrutto = monatsBrutto * 12;
     var vspRentenversicherung = rv * 12;
-    var vspKrankenPflege = (kv + pv) * 12 * 0.82;
+    var vspKrankenPflege = (kv + pv) * 12 * 0.96; // Korrigierter Ansatz BMF
     var vorsorgePauschale = vspRentenversicherung + vspKrankenPflege;
     
     var zuVersteuerndesEinkommen = Math.max(0, jahresBrutto - vorsorgePauschale - 1230 - 36);
@@ -95,6 +98,7 @@ function calculateNettoDetails(monatsBrutto, steuerklasse, kirchensteuer, anzahl
 
     var lst = Math.floor(jahresLohnsteuer / 12);
 
+    // 3. Soli
     var soli = 0;
     var freigrenzeSoliMonat = (steuerklasse === "3") ? 3032 : 1516;
     if (lst > freigrenzeSoliMonat) {
@@ -104,6 +108,7 @@ function calculateNettoDetails(monatsBrutto, steuerklasse, kirchensteuer, anzahl
         }
     }
 
+    // 4. Kirchensteuer
     var kst = 0;
     if (kirchensteuer === "ja") {
         kst = lst * blData.kstSatz;
