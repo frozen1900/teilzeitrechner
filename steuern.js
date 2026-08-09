@@ -1,23 +1,18 @@
-// steuern.js (Korrigiert für 2026 mit exakter Vorsorgepauschale & BMF-Tarif)
+// steuern.js (Fokussiert auf reine Steuer- & Sozialabgaben-Formeln)
 
 var STEUER_PARAMS = {
-    // Beitragsbemessungsgrenzen 2026 (monatlich)
     bbgKV: 5175.00, 
     bbgRV_West: 7550.00,
     bbgRV_Ost: 7450.00,
 
-    // Sozialabgaben Arbeitnehmeranteil
     satzRV: 0.093, 
     satzAV: 0.013, 
-    satzKV_Basis: 0.073, 
-    satzKV_Zusatz: 0.0085, // 1,7% Zusatzbeitrag (AN-Anteil: 0,85%)
+    satzKV_Basis: 0.073,
 
-    // Pflegeversicherung (Arbeitnehmeranteil)
-    satzPV_Basis: 0.017, 
+    satzPV_Basis: 0.022, 
     satzPV_Kinderlos: 0.023, 
     abschlagPV_ab_Kind2: 0.0025, 
 
-    // Freibeträge 2026
     grundfreibetrag: 11784
 };
 
@@ -40,7 +35,6 @@ var BUNDESLAND_DATEN = {
     "TH": { gebiet: "ost",  kstSatz: 0.09 }
 };
 
-// BMF-Tarifformel Einkommensteuer
 function berechneBMFESt(zvE) {
     if (zvE <= 11784) {
         return 0;
@@ -57,7 +51,7 @@ function berechneBMFESt(zvE) {
     }
 }
 
-function calculateNettoDetails(monatsBrutto, steuerklasse, kirchensteuer, anzahlKinder, bundesland) {
+function calculateNettoDetails(monatsBrutto, steuerklasse, kirchensteuer, anzahlKinder, bundesland, kkKey, customZusatz) {
     if (monatsBrutto <= 0) {
         return { brutto: 0, kv: 0, rv: 0, av: 0, pv: 0, lst: 0, soli: 0, kst: 0, netto: 0 };
     }
@@ -65,10 +59,12 @@ function calculateNettoDetails(monatsBrutto, steuerklasse, kirchensteuer, anzahl
     var blData = BUNDESLAND_DATEN[bundesland] || BUNDESLAND_DATEN["NW"];
     var bbgRV = blData.gebiet === 'west' ? STEUER_PARAMS.bbgRV_West : STEUER_PARAMS.bbgRV_Ost;
     
-    // 1. Sozialabgaben
+    // Aufruf der Logik aus krankenkasse.js
+    var anZusatz = getArbeitnehmerZusatzbeitrag(kkKey, customZusatz);
+
     var rv = Math.min(monatsBrutto, bbgRV) * STEUER_PARAMS.satzRV;
     var av = Math.min(monatsBrutto, bbgRV) * STEUER_PARAMS.satzAV;
-    var kv = Math.min(monatsBrutto, STEUER_PARAMS.bbgKV) * (STEUER_PARAMS.satzKV_Basis + STEUER_PARAMS.satzKV_Zusatz);
+    var kv = Math.min(monatsBrutto, STEUER_PARAMS.bbgKV) * (STEUER_PARAMS.satzKV_Basis + anZusatz);
     
     var pvSatz = STEUER_PARAMS.satzPV_Basis;
     if (anzahlKinder === 0) {
@@ -81,29 +77,24 @@ function calculateNettoDetails(monatsBrutto, steuerklasse, kirchensteuer, anzahl
 
     var svBeitragMonat = kv + pv + rv + av;
 
-    // 2. Lohnsteuerberechnung mit korrekter Vorsorgepauschale
     var jahresBrutto = monatsBrutto * 12;
-    
-    // Realitätsnahe Vorsorgepauschale (Teilversorgungs-Kürzung & Pauschalen)
     var vspRentenversicherung = rv * 12;
-    var vspKrankenPflege = (kv + pv) * 12 * 0.82; // BMF-Kürzungssatz für Basisschutz
+    var vspKrankenPflege = (kv + pv) * 12 * 0.82;
     var vorsorgePauschale = vspRentenversicherung + vspKrankenPflege;
     
     var zuVersteuerndesEinkommen = Math.max(0, jahresBrutto - vorsorgePauschale - 1230 - 36);
 
-    // Steuerklassen
     var jahresLohnsteuer = 0;
     if (steuerklasse === "3") {
         jahresLohnsteuer = berechneBMFESt(zuVersteuerndesEinkommen / 2) * 2;
     } else if (steuerklasse === "5") {
         jahresLohnsteuer = berechneBMFESt(zuVersteuerndesEinkommen * 1.25);
-    } else { // Klasse 1 / 4
+    } else { 
         jahresLohnsteuer = berechneBMFESt(zuVersteuerndesEinkommen);
     }
 
     var lst = Math.floor(jahresLohnsteuer / 12);
 
-    // 3. Soli
     var soli = 0;
     var freigrenzeSoliMonat = (steuerklasse === "3") ? 3032 : 1516;
     if (lst > freigrenzeSoliMonat) {
@@ -113,7 +104,6 @@ function calculateNettoDetails(monatsBrutto, steuerklasse, kirchensteuer, anzahl
         }
     }
 
-    // 4. Kirchensteuer
     var kst = 0;
     if (kirchensteuer === "ja") {
         kst = lst * blData.kstSatz;
