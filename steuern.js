@@ -1,4 +1,4 @@
-// steuern.js (Exakte Bemessungsgrenzen & PV-Anpassung)
+// steuern.js (Exakte Werte für Beitragsbemessungsgrenze & BMF-Tarif)
 
 var STEUER_PARAMS = {
     // Bemessungsgrenzen
@@ -9,7 +9,7 @@ var STEUER_PARAMS = {
     // Sozialabgaben Arbeitnehmeranteil
     satzRV: 0.093, 
     satzAV: 0.013, 
-    satzKV_Basis: 0.073, // 7,3 %
+    satzKV_Basis: 0.073,
 
     grundfreibetrag: 11784
 };
@@ -64,16 +64,14 @@ function calculateNettoDetails(monatsBrutto, steuerklasse, kirchensteuer, anzahl
     var av = Math.min(monatsBrutto, bbgRV) * STEUER_PARAMS.satzAV;
     var kv = Math.min(monatsBrutto, STEUER_PARAMS.bbgKV) * (STEUER_PARAMS.satzKV_Basis + anZusatz);
     
-    // Pflegeversicherung (Staffelung nach Kinderanzahl)
-    var pvSatzAN = 0.022; // Basis AN
+    // Exakte Pflegeversicherung nach Kinderanzahl (PUEG)
+    var pvSatzAN = 0.022; // Basis 1 Kind
     if (anzahlKinder === 0) {
-        pvSatzAN = 0.028; // Kinderlos (+0,6%)
-    } else if (anzahlKinder === 1) {
-        pvSatzAN = 0.022;
-    } else {
-        // -0,25% ab dem 2. Kind
-        var abschlag = Math.min(anzahlKinder - 1, 4) * 0.0025;
-        pvSatzAN = Math.max(0.007, 0.017 - abschlag + 0.000125); // Exakter AN-Pflegesatz
+        pvSatzAN = 0.028; // Kinderlos
+    } else if (anzahlKinder >= 2) {
+        // -0,25% pro Kind ab dem 2. Kind
+        var beruecksichtigteKinder = Math.min(anzahlKinder - 1, 4);
+        pvSatzAN = 0.017625 - ((beruecksichtigteKinder - 1) * 0.0025);
     }
     
     var pv = Math.min(monatsBrutto, STEUER_PARAMS.bbgKV) * pvSatzAN;
@@ -82,7 +80,7 @@ function calculateNettoDetails(monatsBrutto, steuerklasse, kirchensteuer, anzahl
     // 2. Lohnsteuerberechnung mit BMF-Vorsorgepauschale
     var jahresBrutto = monatsBrutto * 12;
     var vspRentenversicherung = rv * 12;
-    var vspKrankenPflege = (kv + pv) * 12 * 0.96; // Korrigierter Ansatz BMF
+    var vspKrankenPflege = (kv + pv) * 12 * 0.96;
     var vorsorgePauschale = vspRentenversicherung + vspKrankenPflege;
     
     var zuVersteuerndesEinkommen = Math.max(0, jahresBrutto - vorsorgePauschale - 1230 - 36);
