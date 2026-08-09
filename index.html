@@ -22,7 +22,7 @@
         header h1 { font-size: 1.5rem; color: var(--primary); }
         .card { background: var(--card-bg); border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border); }
         .card-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 14px; border-bottom: 2px solid var(--bg); padding-bottom: 8px; }
-        .form-group { margin-bottom: 14px; }
+        .form-group { margin-bottom: 14px; position: relative; }
         label { display: block; font-size: 0.85rem; font-weight: 500; color: var(--text-muted); margin-bottom: 4px; }
         .input-row { display: flex; gap: 10px; margin-bottom: 14px; }
         input, select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 1rem; outline: none; }
@@ -46,6 +46,32 @@
         .breakdown-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 0.85rem; }
         .breakdown-table th, .breakdown-table td { text-align: right; padding: 8px 4px; border-bottom: 1px solid var(--border); }
         .breakdown-table th:first-child, .breakdown-table td:first-child { text-align: left; }
+
+        /* Searchable Dropdown Styling */
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .dropdown-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            border-bottom: 1px solid var(--bg);
+        }
+        .dropdown-item:hover, .dropdown-item.active {
+            background-color: #eff6ff;
+            color: var(--primary);
+        }
     </style>
 </head>
 <body>
@@ -55,7 +81,9 @@
         <p>Vollzeit vs. Teilzeit im direkten Vergleich</p>
     </header>
 
-    <script src="steuern.js"></script>
+    <!-- Skripte für Logik & Daten -->
+    <script src="krankenkasse.js?v=1"></script>
+    <script src="steuern.js?v=5"></script>
 
     <div class="card">
         <div class="card-title">1. Vollzeit Basisdaten</div>
@@ -92,6 +120,19 @@
                 <label for="anzahlKinder">Anzahl Kinder</label>
                 <input type="number" id="anzahlKinder" value="2" min="0" oninput="calculate()">
             </div>
+        </div>
+
+        <!-- Durchsuchbares Krankenkassen-Feld -->
+        <div class="form-group">
+            <label for="kkSearchInput">Krankenkasse (Zusatzbeitrag)</label>
+            <input type="text" id="kkSearchInput" placeholder="Krankenkasse suchen (z. B. TK)..." autocomplete="off" onfocus="showKKMenu()" oninput="filterKKMenu()">
+            <input type="hidden" id="selectedKKKey" value="standard">
+            <div id="kkDropdownMenu" class="dropdown-menu"></div>
+        </div>
+
+        <div class="form-group" id="groupCustomKK" style="display: none;">
+            <label for="customZusatz">Eigener Zusatzbeitrag in %</label>
+            <input type="number" id="customZusatz" value="1.7" step="0.1" min="0" oninput="calculate()">
         </div>
 
         <div class="form-group">
@@ -188,6 +229,62 @@
             calculate();
         }
 
+        // Suchfunktion für Krankenkassen
+        function renderKKMenu(filterText) {
+            var menu = document.getElementById('kkDropdownMenu');
+            menu.innerHTML = '';
+            var search = (filterText || '').toLowerCase();
+
+            if (typeof KRANKENKASSEN === 'undefined') {
+                console.error("krankenkasse.js wurde nicht geladen.");
+                return;
+            }
+
+            for (var key in KRANKENKASSEN) {
+                var itemData = KRANKENKASSEN[key];
+                var nameMatch = itemData.name.toLowerCase().indexOf(search) !== -1;
+                var tagsMatch = itemData.tags ? itemData.tags.toLowerCase().indexOf(search) !== -1 : false;
+
+                if (!search || nameMatch || tagsMatch) {
+                    var div = document.createElement('div');
+                    div.className = 'dropdown-item';
+                    div.innerText = itemData.name;
+                    div.onclick = (function(k, name) {
+                        return function() {
+                            selectKK(k, name);
+                        };
+                    })(key, itemData.name);
+                    menu.appendChild(div);
+                }
+            }
+        }
+
+        function showKKMenu() {
+            renderKKMenu(document.getElementById('kkSearchInput').value);
+            document.getElementById('kkDropdownMenu').style.display = 'block';
+        }
+
+        function filterKKMenu() {
+            renderKKMenu(document.getElementById('kkSearchInput').value);
+        }
+
+        function selectKK(key, name) {
+            document.getElementById('selectedKKKey').value = key;
+            document.getElementById('kkSearchInput').value = name;
+            document.getElementById('kkDropdownMenu').style.display = 'none';
+
+            var isCustom = key === 'individuell';
+            document.getElementById('groupCustomKK').style.display = isCustom ? 'block' : 'none';
+            calculate();
+        }
+
+        // Menü schließen, wenn außerhalb geklickt wird
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.form-group')) {
+                document.getElementById('kkDropdownMenu').style.display = 'none';
+            }
+        });
+
         function formatEUR(val) {
             return val.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
         }
@@ -204,6 +301,8 @@
             var kirchensteuer = document.getElementById('kirchensteuer').value;
             var anzahlKinder = parseInt(document.getElementById('anzahlKinder').value) || 0;
             var bundesland = document.getElementById('bundesland').value;
+            var kkKey = document.getElementById('selectedKKKey').value;
+            var customZusatz = parseFloat(document.getElementById('customZusatz').value) || 1.7;
 
             var isHours = document.getElementById('modeHours').checked;
             var stundenTz, prozentTz;
@@ -218,8 +317,8 @@
 
             var bruttoTz = bruttoVz * (prozentTz / 100);
 
-            var dataVz = calculateNettoDetails(bruttoVz, steuerklasse, kirchensteuer, anzahlKinder, bundesland);
-            var dataTz = calculateNettoDetails(bruttoTz, steuerklasse, kirchensteuer, anzahlKinder, bundesland);
+            var dataVz = calculateNettoDetails(bruttoVz, steuerklasse, kirchensteuer, anzahlKinder, bundesland, kkKey, customZusatz);
+            var dataTz = calculateNettoDetails(bruttoTz, steuerklasse, kirchensteuer, anzahlKinder, bundesland, kkKey, customZusatz);
 
             var monatsStundenVz = stundenVz * 4.33;
             var monatsStundenTz = stundenTz * 4.33;
@@ -244,7 +343,13 @@
             });
         }
 
-        setTimeout(calculate, 100);
+        // Standardauswahl setzen & Berechnung starten
+        setTimeout(function() {
+            if (typeof KRANKENKASSEN !== 'undefined' && KRANKENKASSEN['standard']) {
+                document.getElementById('kkSearchInput').value = KRANKENKASSEN['standard'].name;
+            }
+            calculate();
+        }, 100);
     </script>
 </body>
 </html>
